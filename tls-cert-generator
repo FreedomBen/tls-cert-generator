@@ -1,0 +1,274 @@
+#!/usr/bin/env ruby
+
+require 'thor'
+require 'ostruct'
+
+module Sh
+  def self.run_command(command)
+    stdout = `#{command}`
+    OpenStruct.new({
+      success?: $?.exitstatus == 0,
+      exitstatus: $?.exitstatus,
+      stdout: stdout
+    })
+  end
+end
+
+module Filenames
+  def self.name(opts, file) "#{opts[:output_dir]}/#{file}" end
+
+  def self.ca_key(opts, file='ca.key')         name(opts, file) end
+  def self.ca_crt(opts, file='ca.crt')         name(opts, file) end
+  def self.ca_srl(opts, file='ca.srl')         name(opts, file) end
+  def self.client_key(opts, file='client.key') name(opts, file) end
+  def self.client_crt(opts, file='client.crt') name(opts, file) end
+  def self.client_csr(opts, file='client.csr') name(opts, file) end
+  def self.client_pfx(opts, file='client.pfx') name(opts, file) end
+  def self.client_pem(opts, file='client.pem') name(opts, file) end
+  def self.server_key(opts, file='server.key') name(opts, file) end
+  def self.server_crt(opts, file='server.crt') name(opts, file) end
+  def self.server_csr(opts, file='server.csr') name(opts, file) end
+  def self.server_pfx(opts, file='server.pfx') name(opts, file) end
+  def self.server_pem(opts, file='server.pem') name(opts, file) end
+end
+
+class TlsCertGenerator < Thor
+  class_option :output_dir, type: :string, aliases: 'o', default: '/output'
+  class_option :verbose, type: :boolean, aliases: 'v', default: false
+
+  desc 'ca <repo-name>', 'Generate a new root CA and specified number of intermediates'
+  option :hostname, type: :string, aliases: 'h', required: true
+  option :intermediates, type: :numeric, aliases: 'i', default: 1
+  option :country, type: :string, aliases: 'c', default: 'US'
+  option :state, type: :string, aliases: 's', default: 'ID'
+  option :locality, type: :string, aliases: 'l', default: 'Boise'
+  option :organization_name, type: :string, aliases: 'n', default: 'ExampleBank'
+  option :organization_unit_name, type: :string, aliases: 'u', default: ''
+  option :email, type: :string, aliases: 'e', default: '_'
+  def ca
+    verbose(options, "Generating CA with options: #{options}")
+    generate_root_ca_key_and_crt(options, use_existing: false)
+  end
+
+  desc 'client <--hostname myhost>', 'Generate a new client cert and key for TLS'
+  option :hostname, type: :string, aliases: 'h', required: true
+  option :pfx, type: :boolean, aliases: 'p', default: false
+  option :country, type: :string, aliases: 'c', default: 'US'
+  option :state, type: :string, aliases: 's', default: 'ID'
+  option :locality, type: :string, aliases: 'l', default: 'Boise'
+  option :organization_name, type: :string, aliases: 'o', default: 'ExampleBank'
+  option :organization_unit_name, type: :string, aliases: 'u', default: ''
+  option :email, type: :string, aliases: 'e', default: '_'
+  def client
+    verbose(options, "Generating client key and cert with options: #{options}")
+    generate_root_ca_key_and_crt(options, use_existing: true)
+    generate_client_key_and_csr(options)
+    sign_client_crt(options)
+    create_client_pem(options)
+    create_client_pfx if options[:pfx]
+  end
+
+  desc 'server <--hostname myhost>', 'Generate a new server cert and key for TLS'
+  option :hostname, type: :string, aliases: 'h', required: true
+  option :pfx, type: :boolean, aliases: 'p', default: false
+  option :country, type: :string, aliases: 'c', default: 'US'
+  option :state, type: :string, aliases: 's', default: 'ID'
+  option :locality, type: :string, aliases: 'l', default: 'Boise'
+  option :organization_name, type: :string, aliases: 'o', default: 'ExampleBank'
+  option :organization_unit_name, type: :string, aliases: 'u', default: ''
+  option :email, type: :string, aliases: 'e', default: '_'
+  def server
+    verbose(options, "Generating server key and cert with options: #{options}")
+    generate_root_ca_key_and_crt(options, use_existing: true)
+    generate_server_key_and_csr(options)
+    sign_server_crt(options)
+    create_server_pem(options)
+    create_server_pfx if options[:pfx]
+  end
+
+  private
+
+  def verbose(options, msg)
+    if verbose?(options)
+      puts "[DEBUG]: #{msg}"
+    end
+  end
+
+  def generate_root_ca_key_and_crt(options, use_existing: true)
+    outfile = output_filename(Filenames.ca_key(options), options)
+    if confirm_overwrite(outfile)
+      verbose(options, "Overwrite for file '#{outfile}' confirmed")
+      openssl %W[
+        req
+        -nodes
+        -x509
+        -newkey rsa:2048
+        -keyout #{outfile}
+        -out #{output_filename(Filenames.ca_crt(options), options)}
+        -subj #{openssl_subj(options)}
+      ]
+      verbose(options, 'Done generating root ca key and crt')
+    else
+      puts "Not generating root ca key and cert because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def generate_intermediate_ca_key_and_crt(options)
+    # TODO
+  end
+
+  def generate_server_key_and_csr(options)
+    outfile = output_filename(Filenames.server_key(options), options)
+    if confirm_overwrite(outfile)
+      openssl %W[
+        req
+        -nodes
+        -newkey rsa:2048
+        -keyout #{outfile}
+        -out #{output_filename(Filenames.server_csr(options), options)}
+        -subj #{openssl_subj(options)}
+      ]
+    else
+      puts "Not generating server key and csr because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def sign_server_crt(options)
+    outfile = output_filename(Filenames.server_crt(options), options)
+    if confirm_overwrite(outfile)
+      openssl %W[
+        x509
+        -req
+        -in #{Filenames.server_csr(options)}
+        -CA #{Filenames.ca_crt(options)}
+        -CAkey #{Filenames.ca_key(options)}
+        -CAcreateserial
+        -out #{outfile}
+      ]
+    else
+      puts "Not generating server cert because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def create_pem(file1, file2)
+    cmd = "cat #{Filenames.server_key(options)} #{Filenames.server_crt(options)} > #{Filenames.server_pem(options)}"
+    unless Sh.run_command(cmd).success?
+      puts "Encountered error running '#{cmd}'"
+      exit 1
+    end
+  end
+
+  def create_server_pem(options)
+    create_pem(Filenames.server_key(options), Filenames.server_crt(options))
+  end
+
+  def generate_client_key_and_csr(options)
+    outfile = output_filename(Filenames.client_key(options), options)
+    if confirm_overwrite(outfile)
+      openssl %W[
+        req
+        -nodes
+        -newkey rsa:2048
+        -keyout #{outfile}
+        -out #{Filenames.client_csr(options)}
+        -subj #{openssl_subj(options)}
+      ]
+    else
+      puts "Not generating client key and csr because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def sign_client_crt(options)
+    outfile = output_filename(Filenames.client_crt(options), options)
+    if confirm_overwrite(outfile)
+      openssl %W[
+        x509
+        -req
+        -in #{Filenames.client_csr(options)}
+        -CA #{Filenames.ca_crt(options)}
+        -CAkey #{Filenames.ca_key(options)}
+        -CAserial #{Filenames.ca_srl(options)}
+        -out #{outfile}
+      ]
+    else
+      puts "Not signing client cert because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def create_client_pem(options)
+    create_pem(Filenames.client_key(options), Filenames.client_crt(options))
+  end
+
+  def create_client_pfx(options)
+    outfile = output_filename(Filenames.client_pfx(options), options)
+    if confirm_overwrite(outfile)
+      openssl %W[
+        pkcs12
+        -inkey #{Filenames.client_key(options)}
+        -in #{Filenames.client_crt(options)}
+        -export
+        -out #{outfile}
+      ]
+    else
+      puts "Not generating client pfx because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def verbose?(options)
+    !!options[:verbose]
+  end
+
+  def which_openssl
+    openssl ||= `which openssl`.chomp
+    openssl
+  end
+
+  def openssl(args)
+    cmd = "#{which_openssl} #{args.join(' ')}"
+    unless Sh.run_command(cmd).success?
+      puts "Encountered error running command '#{cmd}'"
+      exit 1
+    end
+  end
+
+  def openssl_subj(options)
+    "/C=#{options[:country]}/ST=#{options[:state]}/L=#{options[:locality]}/O=#{options[:organization_name]}/OU=#{options[:organization_unit_name]}/CN=#{options[:hostname]}/emailAddress=#{options[:email]}"
+  end
+
+  def confirm_overwrite(filename)
+    if File.exist?(filename)
+      print "The file '#{filename}' already exists but will be overwritten.  Continue? (Y/N): "
+      STDIN.gets.chomp =~ /^y/i
+    else
+      true
+    end
+  end
+end
+
+def set_working_dir(options)
+  FileUtils.mkdir_p(options[:output_dir]) unless Dir.exist?(options[:output_dir])
+  FileUtils.chdir(options[:output_dir])
+end
+
+def output_filename(filename, options)
+  "#{options[:output_dir]}/#{filename}"
+end
+
+def main(args)
+  if args.empty? || args.first =~ /-?-?h(elp)?$/i
+    # display thor's built in help
+    puts 'For more information about a command, use:
+
+    tls-cert-generator help <command>
+
+  E.G.:
+
+    tls-cert-generator help client
+    '
+    TlsCertGenerator.start(%w[help])
+  else
+    TlsCertGenerator.start(args)
+  end
+end
+
+main ARGV.dup
