@@ -2,7 +2,7 @@
 
 A tool to help create CAs and issue certificates with them for testing.
 
-This tool is 90% complete.  As I'm the only known user, the remaining 10% is not a priority.  If you are using this tool let me know and I'll try to finish it.
+This tool is 90% complete.  Intermdiate CA isn't implemented yet so don't use it.  As I'm the only known user, the remaining 10% is not a priority.  If you are using this tool let me know and I'll add it to my TODO list.
 
 ## Notes
 

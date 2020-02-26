@@ -48,7 +48,7 @@ class TlsCertGenerator < Thor
 
   desc 'ca', 'Generate a new root CA and specified number of intermediates'
   option :hostname, type: :string, aliases: 'h', required: true
-  option :intermediates, type: :numeric, aliases: 'i', default: 1
+  option :intermediate, type: :boolean, aliases: 'i', default: false
   option :country, type: :string, aliases: 'c', default: 'US'
   option :state, type: :string, aliases: 's', default: 'ID'
   option :locality, type: :string, aliases: 'l', default: 'Boise'
@@ -57,11 +57,24 @@ class TlsCertGenerator < Thor
   option :email, type: :string, aliases: 'e', default: '_'
   def ca
     verbose(options, "Generating CA with options: #{options}")
-    generate_root_ca_key_and_crt(options, use_existing: false)
+    generate_ca_key_and_crt(
+      options,
+      intermediate: false,
+      use_existing: false
+    )
+    if options[:intermediate]
+      generate_ca_key_and_crt(
+        options,
+        intermediate: true,
+        use_existing: false
+      ) 
+      sign_in_ca_key_and_crt(options)
+    end
   end
 
   desc 'client', 'Generate a new client cert and key for TLS'
   option :hostname, type: :string, aliases: 'h', required: true
+  option :intermediate, type: :boolean, aliases: 'i', default: false
   option :pfx, type: :boolean, aliases: 'p', default: false
   option :country, type: :string, aliases: 'c', default: 'US'
   option :state, type: :string, aliases: 's', default: 'ID'
@@ -71,7 +84,7 @@ class TlsCertGenerator < Thor
   option :email, type: :string, aliases: 'e', default: '_'
   def client
     verbose(options, "Generating client key and cert with options: #{options}")
-    generate_root_ca_key_and_crt(options, use_existing: true)
+    generate_ca_key_and_crt(options, use_existing: true)
     generate_client_key_and_csr(options)
     sign_client_crt(options)
     create_client_pem(options)
@@ -80,6 +93,7 @@ class TlsCertGenerator < Thor
 
   desc 'server', 'Generate a new server cert and key for TLS'
   option :hostname, type: :string, aliases: 'h', required: true
+  option :intermediate, type: :boolean, aliases: 'i', default: false
   option :pfx, type: :boolean, aliases: 'p', default: false
   option :country, type: :string, aliases: 'c', default: 'US'
   option :state, type: :string, aliases: 's', default: 'ID'
@@ -89,7 +103,7 @@ class TlsCertGenerator < Thor
   option :email, type: :string, aliases: 'e', default: '_'
   def server
     verbose(options, "Generating server key and cert with options: #{options}")
-    generate_root_ca_key_and_crt(options, use_existing: true)
+    generate_ca_key_and_crt(options, use_existing: true)
     generate_server_key_and_csr(options)
     sign_server_crt(options)
     create_server_pem(options)
@@ -104,33 +118,50 @@ class TlsCertGenerator < Thor
     end
   end
 
-  def generate_root_ca_key_and_crt(options, use_existing: true)
-    verbose(options, 'Entering method generate_root_ca_key_and_crt')
-    outfile = Filenames.ca_key(options)
-    verbose(options, "outfile is '#{outfile}'")
-    if use_existing && File.exist?(outfile)
+  def generate_ca_key_and_crt(options, is_intermediate:, use_existing: true)
+    verbose(options, 'Entering method generate_ca_key_and_crt')
+    key_outfile = if is_intermediate
+                    Filenames.in_ca_key(options, 1)
+                  else
+                    Filenames.ca_key(options)
+                  end
+    crt_outfile = if is_intermediate
+                    Filenames.in_ca_crt(options, 1)
+                  else
+                    Filenames.ca_crt(options)
+                  end
+    verbose(options, "key_outfile is '#{key_outfile}'")
+    verbose(options, "crt_outfile is '#{crt_outfile}'")
+    if use_existing && File.exist?(key_outfile)
       verbose(options, 'Using existing root CA Key and Crt')
     else
-      if confirm_overwrite(options, outfile)
-        verbose(options, "Overwrite for file '#{outfile}' confirmed")
+      if confirm_overwrite(options, key_outfile)
+        verbose(options, "Overwrite for file '#{key_outfile}' confirmed")
         openssl %W[
           req
           -nodes
           -x509
           -newkey rsa:2048
-          -keyout #{outfile}
-          -out #{Filenames.ca_crt(options)}
+          -keyout #{key_outfile}
+          -out #{crt_outfile}
           -subj #{openssl_subj(options)}
         ]
         verbose(options, 'Done generating root ca key and crt')
       else
-        puts "Not generating root ca key and cert because file '#{outfile}' already exists and user declined to overwrite"
+        puts "Not generating root ca key and cert because file '#{key_outfile}' already exists and user declined to overwrite"
       end
     end
   end
 
-  def generate_intermediate_ca_key_and_crt(options)
-    # TODO
+  def sign_in_ca_key_and_crt(options)
+    # TODO - finish support for intermediate CA
+    #openssl %W[
+    #  ca
+    #  -config openssl.cnf
+    #  -extensions v3_intermediate_ca
+    #  -in intermediate/csr/intermediate.csr.pem
+    #  -out intermediate/certs/intermediate.cert.pem
+    #]
   end
 
   def generate_server_key_and_csr(options)
@@ -150,6 +181,7 @@ class TlsCertGenerator < Thor
   end
 
   def sign_server_crt(options)
+    # TODO - Add support for signing with the intermediate CA
     outfile = Filenames.server_crt(options)
     if confirm_overwrite(options, outfile)
       openssl %W[
@@ -201,6 +233,7 @@ class TlsCertGenerator < Thor
   end
 
   def sign_client_crt(options)
+    # TODO - Add support for signing with the intermediate CA
     outfile = Filenames.client_crt(options)
     if confirm_overwrite(options, outfile)
       openssl %W[
