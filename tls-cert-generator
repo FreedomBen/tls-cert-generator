@@ -33,8 +33,9 @@ module Filenames
 end
 
 class TlsCertGenerator < Thor
-  class_option :output_dir, type: :string, aliases: 'o', default: '/output'
+  class_option :output_dir, type: :string, aliases: 'o', default: '/opt/app-root/generated'
   class_option :verbose, type: :boolean, aliases: 'v', default: false
+  class_option :clobber, type: :boolean, aliases: 'x', default: false
 
   desc 'ca', 'Generate a new root CA and specified number of intermediates'
   option :hostname, type: :string, aliases: 'h', required: true
@@ -65,7 +66,7 @@ class TlsCertGenerator < Thor
     generate_client_key_and_csr(options)
     sign_client_crt(options)
     create_client_pem(options)
-    create_client_pfx if options[:pfx]
+    create_client_pfx(options) if options[:pfx]
   end
 
   desc 'server', 'Generate a new server cert and key for TLS'
@@ -83,7 +84,7 @@ class TlsCertGenerator < Thor
     generate_server_key_and_csr(options)
     sign_server_crt(options)
     create_server_pem(options)
-    create_server_pfx if options[:pfx]
+    create_server_pfx(options) if options[:pfx]
   end
 
   private
@@ -95,21 +96,27 @@ class TlsCertGenerator < Thor
   end
 
   def generate_root_ca_key_and_crt(options, use_existing: true)
-    outfile = output_filename(Filenames.ca_key(options), options)
-    if confirm_overwrite(outfile)
-      verbose(options, "Overwrite for file '#{outfile}' confirmed")
-      openssl %W[
-        req
-        -nodes
-        -x509
-        -newkey rsa:2048
-        -keyout #{outfile}
-        -out #{output_filename(Filenames.ca_crt(options), options)}
-        -subj #{openssl_subj(options)}
-      ]
-      verbose(options, 'Done generating root ca key and crt')
+    verbose(options, 'Entering method generate_root_ca_key_and_crt')
+    outfile = Filenames.ca_key(options)
+    verbose(options, "outfile is '#{outfile}'")
+    if use_existing && File.exist?(outfile)
+      verbose(options, 'Using existing root CA Key and Crt')
     else
-      puts "Not generating root ca key and cert because file '#{outfile}' already exists and user declined to overwrite"
+      if confirm_overwrite(options, outfile)
+        verbose(options, "Overwrite for file '#{outfile}' confirmed")
+        openssl %W[
+          req
+          -nodes
+          -x509
+          -newkey rsa:2048
+          -keyout #{outfile}
+          -out #{Filenames.ca_crt(options)}
+          -subj #{openssl_subj(options)}
+        ]
+        verbose(options, 'Done generating root ca key and crt')
+      else
+        puts "Not generating root ca key and cert because file '#{outfile}' already exists and user declined to overwrite"
+      end
     end
   end
 
@@ -118,14 +125,14 @@ class TlsCertGenerator < Thor
   end
 
   def generate_server_key_and_csr(options)
-    outfile = output_filename(Filenames.server_key(options), options)
-    if confirm_overwrite(outfile)
+    outfile = Filenames.server_key(options)
+    if confirm_overwrite(options, outfile)
       openssl %W[
         req
         -nodes
         -newkey rsa:2048
         -keyout #{outfile}
-        -out #{output_filename(Filenames.server_csr(options), options)}
+        -out #{Filenames.server_csr(options)}
         -subj #{openssl_subj(options)}
       ]
     else
@@ -134,8 +141,8 @@ class TlsCertGenerator < Thor
   end
 
   def sign_server_crt(options)
-    outfile = output_filename(Filenames.server_crt(options), options)
-    if confirm_overwrite(outfile)
+    outfile = Filenames.server_crt(options)
+    if confirm_overwrite(options, outfile)
       openssl %W[
         x509
         -req
@@ -150,8 +157,9 @@ class TlsCertGenerator < Thor
     end
   end
 
-  def create_pem(file1, file2)
-    cmd = "cat #{Filenames.server_key(options)} #{Filenames.server_crt(options)} > #{Filenames.server_pem(options)}"
+  def create_pem(opts:, key:, crt:, pem:)
+    verbose(opts, '')
+    cmd = "cat #{key} #{crt} > #{pem}"
     unless Sh.run_command(cmd).success?
       puts "Encountered error running '#{cmd}'"
       exit 1
@@ -159,12 +167,17 @@ class TlsCertGenerator < Thor
   end
 
   def create_server_pem(options)
-    create_pem(Filenames.server_key(options), Filenames.server_crt(options))
+    create_pem(
+      opts: options,
+      key: Filenames.server_key(options),
+      crt: Filenames.server_crt(options),
+      pem: Filenames.server_pem(options)
+    )
   end
 
   def generate_client_key_and_csr(options)
-    outfile = output_filename(Filenames.client_key(options), options)
-    if confirm_overwrite(outfile)
+    outfile = Filenames.client_key(options)
+    if confirm_overwrite(options, outfile)
       openssl %W[
         req
         -nodes
@@ -179,29 +192,35 @@ class TlsCertGenerator < Thor
   end
 
   def sign_client_crt(options)
-    outfile = output_filename(Filenames.client_crt(options), options)
-    if confirm_overwrite(outfile)
+    outfile = Filenames.client_crt(options)
+    if confirm_overwrite(options, outfile)
       openssl %W[
         x509
         -req
         -in #{Filenames.client_csr(options)}
         -CA #{Filenames.ca_crt(options)}
         -CAkey #{Filenames.ca_key(options)}
-        -CAserial #{Filenames.ca_srl(options)}
+        -CAcreateserial
         -out #{outfile}
       ]
+        #-CAserial #{Filenames.ca_srl(options)}
     else
       puts "Not signing client cert because file '#{outfile}' already exists and user declined to overwrite"
     end
   end
 
   def create_client_pem(options)
-    create_pem(Filenames.client_key(options), Filenames.client_crt(options))
+    create_pem(
+      opts: options,
+      key: Filenames.client_key(options),
+      crt: Filenames.client_crt(options),
+      pem: Filenames.client_pem(options)
+    )
   end
 
   def create_client_pfx(options)
-    outfile = output_filename(Filenames.client_pfx(options), options)
-    if confirm_overwrite(outfile)
+    outfile = Filenames.client_pfx(options)
+    if confirm_overwrite(options, outfile)
       openssl %W[
         pkcs12
         -inkey #{Filenames.client_key(options)}
@@ -211,6 +230,21 @@ class TlsCertGenerator < Thor
       ]
     else
       puts "Not generating client pfx because file '#{outfile}' already exists and user declined to overwrite"
+    end
+  end
+
+  def create_server_pfx(options)
+    outfile = Filenames.server_pfx(options)
+    if confirm_overwrite(options, outfile)
+      openssl %W[
+        pkcs12
+        -inkey #{Filenames.server_key(options)}
+        -in #{Filenames.server_crt(options)}
+        -export
+        -out #{outfile}
+      ]
+    else
+      puts "Not generating server pfx because file '#{outfile}' already exists and user declined to overwrite"
     end
   end
 
@@ -235,8 +269,10 @@ class TlsCertGenerator < Thor
     "/C=#{options[:country]}/ST=#{options[:state]}/L=#{options[:locality]}/O=#{options[:organization_name]}/OU=#{options[:organization_unit_name]}/CN=#{options[:hostname]}/emailAddress=#{options[:email]}"
   end
 
-  def confirm_overwrite(filename)
-    if File.exist?(filename)
+  def confirm_overwrite(options, filename)
+    if options[:clobber]
+      true
+    elsif File.exist?(filename)
       print "The file '#{filename}' already exists but will be overwritten.  Continue? (Y/N): "
       STDIN.gets.chomp =~ /^y/i
     else
@@ -248,10 +284,6 @@ end
 def set_working_dir(options)
   FileUtils.mkdir_p(options[:output_dir]) unless Dir.exist?(options[:output_dir])
   FileUtils.chdir(options[:output_dir])
-end
-
-def output_filename(filename, options)
-  "#{options[:output_dir]}/#{filename}"
 end
 
 def main(args)

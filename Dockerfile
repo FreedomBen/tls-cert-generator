@@ -25,4 +25,5 @@ USER default
 COPY --chown=1001:0 tls-cert-generator /opt/app-root/bin/
 
 WORKDIR /opt/app-root/generated
-CMD ["/opt/app-root/bin/tls-cert-generator"]
+ENTRYPOINT ["/opt/app-root/bin/tls-cert-generator"]
+CMD [""]
