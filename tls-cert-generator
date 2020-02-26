@@ -36,7 +36,7 @@ class TlsCertGenerator < Thor
   class_option :output_dir, type: :string, aliases: 'o', default: '/output'
   class_option :verbose, type: :boolean, aliases: 'v', default: false
 
-  desc 'ca <repo-name>', 'Generate a new root CA and specified number of intermediates'
+  desc 'ca', 'Generate a new root CA and specified number of intermediates'
   option :hostname, type: :string, aliases: 'h', required: true
   option :intermediates, type: :numeric, aliases: 'i', default: 1
   option :country, type: :string, aliases: 'c', default: 'US'
@@ -50,7 +50,7 @@ class TlsCertGenerator < Thor
     generate_root_ca_key_and_crt(options, use_existing: false)
   end
 
-  desc 'client <--hostname myhost>', 'Generate a new client cert and key for TLS'
+  desc 'client', 'Generate a new client cert and key for TLS'
   option :hostname, type: :string, aliases: 'h', required: true
   option :pfx, type: :boolean, aliases: 'p', default: false
   option :country, type: :string, aliases: 'c', default: 'US'
@@ -68,7 +68,7 @@ class TlsCertGenerator < Thor
     create_client_pfx if options[:pfx]
   end
 
-  desc 'server <--hostname myhost>', 'Generate a new server cert and key for TLS'
+  desc 'server', 'Generate a new server cert and key for TLS'
   option :hostname, type: :string, aliases: 'h', required: true
   option :pfx, type: :boolean, aliases: 'p', default: false
   option :country, type: :string, aliases: 'c', default: 'US'
