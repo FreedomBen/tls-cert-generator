@@ -15,21 +15,30 @@ module Sh
 end
 
 module Filenames
-  def self.name(opts, file) "#{opts[:output_dir]}/#{file}" end
+  def self.name(opts, n, file)
+    if n && n > 0
+      "#{opts[:output_dir]}/#{n}-#{file}"
+    else
+      "#{opts[:output_dir]}/#{file}"
+    end
+  end
 
-  def self.ca_key(opts, file='ca.key')         name(opts, file) end
-  def self.ca_crt(opts, file='ca.crt')         name(opts, file) end
-  def self.ca_srl(opts, file='ca.srl')         name(opts, file) end
-  def self.client_key(opts, file='client.key') name(opts, file) end
-  def self.client_crt(opts, file='client.crt') name(opts, file) end
-  def self.client_csr(opts, file='client.csr') name(opts, file) end
-  def self.client_pfx(opts, file='client.pfx') name(opts, file) end
-  def self.client_pem(opts, file='client.pem') name(opts, file) end
-  def self.server_key(opts, file='server.key') name(opts, file) end
-  def self.server_crt(opts, file='server.crt') name(opts, file) end
-  def self.server_csr(opts, file='server.csr') name(opts, file) end
-  def self.server_pfx(opts, file='server.pfx') name(opts, file) end
-  def self.server_pem(opts, file='server.pem') name(opts, file) end
+  def self.ca_key(opts, file='ca.key')          name(opts, 0, file) end
+  def self.ca_crt(opts, file='ca.crt')          name(opts, 0, file) end
+  def self.ca_srl(opts, file='ca.srl')          name(opts, 0, file) end
+  def self.in_ca_key(opts, n, file='in-ca.key') name(opts, n, file) end
+  def self.in_ca_crt(opts, n, file='in-ca.crt') name(opts, n, file) end
+  def self.in_ca_srl(opts, n, file='in-ca.srl') name(opts, n, file) end
+  def self.client_key(opts, file='client.key')  name(opts, 0, file) end
+  def self.client_crt(opts, file='client.crt')  name(opts, 0, file) end
+  def self.client_csr(opts, file='client.csr')  name(opts, 0, file) end
+  def self.client_pfx(opts, file='client.pfx')  name(opts, 0, file) end
+  def self.client_pem(opts, file='client.pem')  name(opts, 0, file) end
+  def self.server_key(opts, file='server.key')  name(opts, 0, file) end
+  def self.server_crt(opts, file='server.crt')  name(opts, 0, file) end
+  def self.server_csr(opts, file='server.csr')  name(opts, 0, file) end
+  def self.server_pfx(opts, file='server.pfx')  name(opts, 0, file) end
+  def self.server_pem(opts, file='server.pem')  name(opts, 0, file) end
 end
 
 class TlsCertGenerator < Thor
