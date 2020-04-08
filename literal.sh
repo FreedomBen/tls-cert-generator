@@ -17,7 +17,11 @@ generate_user ()
   #openssl crl -inform PEM -in intermediate1.crl.pem -outform DER -out intermediate1.crl
 
   echo "Generating trust chain for user '$1'"
-  cat ../root/rootca.crt intermediate1.crt > "enduser-certs/${1}.chain"
+  if [ -f intermediate1.crt ]; then
+    cat ../root/rootca.crt intermediate1.crt > "enduser-certs/${1}.chain"
+  else
+    cp ../rootca.crt "enduser-certs/${1}.chain"
+  fi
 
   echo "Verifying cert for user '$1'"
   openssl verify -CAfile "enduser-certs/${1}.chain" "enduser-certs/${1}.crt"
@@ -49,6 +53,13 @@ if ! [ -f certindex ]; then
 fi
 
 mkdir -p enduser-certs
+
+# Make root direct certs
+generate_user "server"
+generate_user "client"
+generate_user "user1"
+generate_user "user2"
+
 
 # Gen intermediate CA
 openssl genrsa -out intermediate1.key 8192
