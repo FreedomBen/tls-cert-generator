@@ -33,9 +33,14 @@ if [ -z "$1" ] || [[ $1 =~ ^--?h ]]; then
   exit 1
 fi
 
-if [ -d "${1}" ] && ! [[ "$2" =~ -?-f(orce)? ]]; then
-  echo "Output dir exists.  Pass -f|--force as second param to continue anyway"
-  exit 1
+if [ -d "${1}" ] ; then
+  if [[ "$2" =~ -?-f(orce)? ]]; then
+    echo "Output dir exists but $2 was passed.  Deleting output dir..."
+    rm -rf "${1}"
+  else
+    echo "Output dir exists.  Pass -f|--force as second param to continue anyway"
+    exit 1
+  fi
 fi
 
 mkdir -p "${1}/root/"
