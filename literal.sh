@@ -18,9 +18,9 @@ generate_user ()
 
   echo "Generating trust chain for user '$1'"
   if [ -f intermediate1.crt ]; then
-    cat ../root/rootca.crt intermediate1.crt > "enduser-certs/${1}.chain"
+    cat intermediate1.crt ../root/rootca.crt > "enduser-certs/${1}.chain"
   else
-    cp ../rootca.crt "enduser-certs/${1}.chain"
+    cp rootca.crt "enduser-certs/${1}.chain"
   fi
 
   echo "Verifying cert for user '$1'"
