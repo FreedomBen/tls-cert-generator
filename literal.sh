@@ -26,6 +26,8 @@ generate_user ()
   echo "Verifying cert for user '$1'"
   openssl verify -CAfile "enduser-certs/${1}.chain" "enduser-certs/${1}.crt"
   #openssl verify -crl_check -CAfile "enduser-certs/${1}.crl.chain" "enduser-certs/${1}.crt"
+  # print details of the cert
+  #openssl x509 -in enduser-certs/${1}.crt  -noout -text
 }
 
 if [ -z "$1" ] || [[ $1 =~ ^--?h ]]; then

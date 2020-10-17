@@ -59,6 +59,7 @@ main ()
 }
 
 if [ -z "$1" ] || [[ $1 =~ ^--?h ]]; then
+  echo "SCRIPT IS NOT FINISHED!  Use litera.sh instead for now"
   echo "Add subjectAltNames and purposes to ca.conf, then pass directory name to output to"
   exit 1
 fi
